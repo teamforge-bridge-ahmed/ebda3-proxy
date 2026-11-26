@@ -51,6 +51,7 @@ http.createServer(async (req, res) => {
   const ok = ALLOW.includes(origin);
   if (req.method === 'OPTIONS') { res.writeHead(ok ? 204 : 403, ok ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600', Vary: 'Origin' } : {}); return res.end(); }
   if (req.method === 'GET') return send(res, 200, { ok: true, token: !!TOKEN }, '');
+  if (req.method === 'POST' && req.url === '/probe' && ok) { let b = ''; for await (const c of req) b += c; try { const j = JSON.parse(b); const t = Date.now(); const r = await fetch('https://router.huggingface.co' + String(j.path), { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify(j.body), signal: AbortSignal.timeout(60000) }); const buf = Buffer.from(await r.arrayBuffer()); return send(res, 200, { status: r.status, type: r.headers.get('content-type'), size: buf.length, ms: Date.now() - t, head: (r.headers.get('content-type') || '').startsWith('image') ? '' : buf.toString().slice(0, 250) }, origin); } catch (e) { return send(res, 200, { err: String(e.message) }, origin); } }
   if (req.method !== 'POST' || req.url !== '/img') return send(res, 404, { error: 'not found' });
   if (!ok) return send(res, 403, { error: 'origin' });
   if (!TOKEN) return send(res, 503, { error: 'not configured' }, origin);
