@@ -33,6 +33,19 @@ async function draw(prompt, w, h, seed) {
   if (!ir.ok) throw Object.assign(new Error('file ' + ir.status), { code: 502 });
   return { buf: Buffer.from(await ir.arrayBuffer()), type: ir.headers.get('content-type') || 'image/png' };
 }
+const HF_MODELS = (process.env.HF_MODELS || 'black-forest-labs/FLUX.1-schnell').split(',');
+async function drawHF(prompt, w, h, seed) {
+  let last = 'none';
+  for (const m of HF_MODELS) {
+    try {
+      const r = await fetch('https://router.huggingface.co/hf-inference/models/' + m, { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json', Accept: 'image/png' }, body: JSON.stringify({ inputs: prompt, parameters: { width: Math.min(w, 1024), height: Math.min(h, 1024), seed } }), signal: AbortSignal.timeout(60000) });
+      const type = r.headers.get('content-type') || '';
+      if (r.ok && type.startsWith('image/')) return { buf: Buffer.from(await r.arrayBuffer()), type, src: 'hf:' + m };
+      last = m + ' ' + r.status + ' ' + (await r.text()).slice(0, 80);
+    } catch (e) { last = m + ' ' + e.message; }
+  }
+  throw Object.assign(new Error(last), { code: 502 });
+}
 http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   const ok = ALLOW.includes(origin);
@@ -45,7 +58,6 @@ http.createServer(async (req, res) => {
   if (limited(ip)) return send(res, 429, { error: 'rate' }, origin);
   if (day.d !== new Date().toDateString()) day = { d: new Date().toDateString(), n: 0 };
   if (day.n >= PER_DAY_ALL) return send(res, 429, { error: 'daily' }, origin);
-  if (Date.now() < quotaUntil) return send(res, 429, { error: 'quota' }, origin);
   if (running >= MAX_PAR) return send(res, 429, { error: 'busy' }, origin);
   let body = ''; for await (const c of req) { body += c; if (body.length > 5000) return send(res, 413, { error: 'big' }, origin); }
   let j; try { j = JSON.parse(body); } catch { return send(res, 400, { error: 'json' }, origin); }
@@ -53,10 +65,12 @@ http.createServer(async (req, res) => {
   if (!prompt || !(w >= 256 && w <= 1024 && h >= 256 && h <= 1024)) return send(res, 400, { error: 'params' }, origin);
   day.n++; running++;
   try {
-    const { buf, type } = await draw(prompt, w, h, seed);
-    res.writeHead(200, { 'Content-Type': type, 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Cache-Control': 'no-store' }); res.end(buf);
+    let out, src = 'z-image';
+    try { if (Date.now() < quotaUntil) throw Object.assign(new Error('quota'), { code: 429 }); out = await draw(prompt, w, h, seed); }
+    catch (e) { if (e.code !== 429) throw e; quotaUntil = Date.now() + 10 * 60000; out = await drawHF(prompt, w, h, seed); src = out.src; }
+    res.writeHead(200, { 'Content-Type': out.type, 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'X-Src', 'X-Src': src, Vary: 'Origin', 'Cache-Control': 'no-store' }); res.end(out.buf);
   } catch (e) {
     if (e.code === 429) quotaUntil = Date.now() + 10 * 60000;
-    send(res, e.code || 502, { error: e.code === 429 ? 'quota' : 'upstream' }, origin);
+    send(res, e.code || 502, { error: e.code === 429 ? 'quota' : 'upstream', detail: String(e.message || '').slice(0, 200) }, origin);
   } finally { running--; }
 }).listen(process.env.PORT || 3000, () => console.log('ebda3 proxy up'));
