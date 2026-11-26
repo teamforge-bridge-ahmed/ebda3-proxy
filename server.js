@@ -4,7 +4,7 @@ const http = require('http');
 const HOST = 'https://mrfakename-z-image-turbo.hf.space/gradio_api/call/generate_image';
 const TOKEN = process.env.HF_TOKEN || '';
 const ALLOW = (process.env.ALLOW_ORIGIN || 'https://teamforge-bridge-ahmed.github.io').split(',').map(s => s.trim());
-const PER_MIN = +process.env.PER_MIN || 6, PER_HOUR = +process.env.PER_HOUR || 60, PER_DAY_ALL = +process.env.PER_DAY_ALL || 600, MAX_PAR = 2;
+const PER_MIN = +process.env.PER_MIN || 40, PER_HOUR = +process.env.PER_HOUR || 300, PER_DAY_ALL = +process.env.PER_DAY_ALL || 2500, MAX_PAR = 3;
 const hits = new Map(); let day = { d: new Date().toDateString(), n: 0 }, running = 0, quotaUntil = 0;
 
 function limited(ip) {
