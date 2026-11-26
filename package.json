@@ -1,0 +1,7 @@
+{
+  "name": "ebda3-proxy",
+  "version": "1.0.0",
+  "description": "Tiny proxy that lets the EBDA3 AI site call the Z-Image Hugging Face Space with a server-side token.",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
