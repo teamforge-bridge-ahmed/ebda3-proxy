@@ -5,6 +5,7 @@ const HOST = 'https://mrfakename-z-image-turbo.hf.space/gradio_api/call/generate
 const TOKEN = process.env.HF_TOKEN || '';
 const ALLOW = (process.env.ALLOW_ORIGIN || 'https://teamforge-bridge-ahmed.github.io').split(',').map(s => s.trim());
 const PER_MIN = +process.env.PER_MIN || 40, PER_HOUR = +process.env.PER_HOUR || 300, PER_DAY_ALL = +process.env.PER_DAY_ALL || 2500, MAX_PAR = 3;
+const PER_IP_DAY = +process.env.PER_IP_DAY || 6, ipDay = new Map();
 const hits = new Map(); let day = { d: new Date().toDateString(), n: 0 }, running = 0, quotaUntil = 0;
 
 function limited(ip) {
@@ -56,6 +57,8 @@ http.createServer(async (req, res) => {
   if (!TOKEN) return send(res, 503, { error: 'not configured' }, origin);
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (limited(ip)) return send(res, 429, { error: 'rate' }, origin);
+  const dk = new Date().toDateString(); if (!ipDay.has(ip) || ipDay.get(ip).d !== dk) { if (ipDay.size > 5000) ipDay.clear(); ipDay.set(ip, { d: dk, n: 0 }); }
+  if (ipDay.get(ip).n >= PER_IP_DAY) return send(res, 429, { error: 'ipday' }, origin);
   if (day.d !== new Date().toDateString()) day = { d: new Date().toDateString(), n: 0 };
   if (day.n >= PER_DAY_ALL) return send(res, 429, { error: 'daily' }, origin);
   if (running >= MAX_PAR) return send(res, 429, { error: 'busy' }, origin);
@@ -68,6 +71,7 @@ http.createServer(async (req, res) => {
     let out, src = 'z-image';
     try { if (Date.now() < quotaUntil) throw Object.assign(new Error('quota'), { code: 429 }); out = await draw(prompt, w, h, seed); }
     catch (e) { if (e.code !== 429) throw e; quotaUntil = Date.now() + 10 * 60000; out = await drawHF(prompt, w, h, seed); src = out.src; }
+    ipDay.get(ip).n++;
     res.writeHead(200, { 'Content-Type': out.type, 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'X-Src', 'X-Src': src, Vary: 'Origin', 'Cache-Control': 'no-store' }); res.end(out.buf);
   } catch (e) {
     if (e.code === 429) quotaUntil = Date.now() + 10 * 60000;
