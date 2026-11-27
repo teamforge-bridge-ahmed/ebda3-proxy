@@ -70,7 +70,7 @@ http.createServer(async (req, res) => {
   try {
     let out, src = 'z-image';
     try { if (Date.now() < quotaUntil) throw Object.assign(new Error('quota'), { code: 429 }); out = await draw(prompt, w, h, seed); }
-    catch (e) { if (e.code !== 429) throw e; quotaUntil = Date.now() + 10 * 60000; out = await drawHF(prompt, w, h, seed); src = out.src; }
+    catch (e) { if (e.code !== 429) throw e; quotaUntil = Date.now() + 10 * 60000; throw e; }
     ipDay.get(ip).n++;
     res.writeHead(200, { 'Content-Type': out.type, 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'X-Src', 'X-Src': src, Vary: 'Origin', 'Cache-Control': 'no-store' }); res.end(out.buf);
   } catch (e) {
